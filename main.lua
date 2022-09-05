@@ -5,6 +5,11 @@ local initial_x_shader = love.graphics.newShader([[
         float max1 = 6.0;
         float min2 = -4.0;
         float max2 = 6.0;
+        
+        //float min1 = 1.4;
+        //float max1 = 2.8;
+        //float min2 = 0.4;
+        //float max2 = 1.8;
 
         float phi1 = 0.0;
         float phi2 = 0.0;
@@ -18,17 +23,19 @@ local initial_x_shader = love.graphics.newShader([[
 local initial_v_shader = love.graphics.newShader([[
 	uniform float seed;
 
-	float rand(vec2 n)
+	float rand(vec2 n, float s)
 	{
-		return fract(sin(dot(n + seed, vec2(12.9898, 4.1414))) * 43758.5453);
+		return fract(sin(dot(n + s, vec2(12.9898, 4.1414))) * 43758.5453);
 	}
-
-    #define PI 3.1415926538
 	
 	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
 	{
-        float a = 2.0 * PI * rand(screen_coords);
-		return vec4(cos(a), sin(a), 0.0, 0.0);
+        vec4 v;
+        v[0] = rand(texture_coords, seed);
+        v[1] = rand(texture_coords, seed+0.58448844);
+        v[2] = rand(texture_coords, seed+0.38406795);
+        v[3] = rand(texture_coords, seed+0.78849948);
+		return normalize(v);
 	}
 ]])
 initial_v_shader:send("seed", (os.time()%10000)/10000)
@@ -42,9 +49,11 @@ local x_shader = love.graphics.newShader([[
         return sin(y)*pow(cos(x)+cos(y)+4.0, -2.0);
     }
 
+    #define PI 3.1415926538
+
 	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
 	{
-        float e = 0.6;
+        float e = -0.6;
 
         vec4 x = Texel(texture, texture_coords);
         float phi1 = x[0];
@@ -52,8 +61,8 @@ local x_shader = love.graphics.newShader([[
         float I1 = x[2];
         float I2 = x[3];
 
-        float phi1p = phi1 + I1;
-        float phi2p = phi2 + I2;
+        float phi1p = mod(phi1 + I1, 2.0*PI);
+        float phi2p = mod(phi2 + I2, 2.0*PI);
         float I1p = I1 + e * f1(phi1+I1, phi2+I2);
         float I2p = I2 + e * f2(phi1+I1, phi2+I2);
 
@@ -66,7 +75,7 @@ local v_shader = love.graphics.newShader([[
 
 	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
 	{
-        float e = 0.6;
+        float e = -0.6;
 
         vec4 x = Texel(x_image, texture_coords);
         float phi1 = x[0];
@@ -117,7 +126,8 @@ local display_shader = love.graphics.newShader([[
         float y = 1.0 - texture_coords[1];
         float mv = Texel(texture, vec2(x,y))[0];
 
-        float c = (mv - 1.5)/(4.0 - 1.5);
+        //float c = log(mv/20.0+1.);
+        float c = (mv - 2.0)/(20.0 - 2.0);
 		return vec4(c, c, c, 1.0);
 	}
 ]])
@@ -208,7 +218,7 @@ function love.draw()
     love.graphics.setShader(mv_shader)
     love.graphics.setCanvas(mv[current])
     mv_shader:send("v_image", v[3-current])
-    mv_shader:send("ve_image", ve[3-current])
+    mv_shader:send("ve_image", ve[1])
     love.graphics.draw(mv[3-current])
 
     love.graphics.setShader(display_shader)
@@ -217,11 +227,12 @@ function love.draw()
 
     if t == T then
         v[current], v[3-current] = v[3-current], v[current]
+        ve[1], ve[2] = ve[2], ve[1]
 
         love.graphics.setShader(ve_shader)
-        love.graphics.setCanvas(ve[current])
+        love.graphics.setCanvas(ve[1])
         ve_shader:send("v_image", v[3-current])
-        love.graphics.draw(ve[3-current])
+        love.graphics.draw(ve[2])
 
         love.graphics.setShader(scale_shader)
         love.graphics.setCanvas(v[current])
