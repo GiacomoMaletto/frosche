@@ -1,6 +1,5 @@
 local initial_x_shader = love.graphics.newShader([[
-	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
-	{
+	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords){
         float min1 = -4.0;
         float max1 = 6.0;
         float min2 = -4.0;
@@ -20,26 +19,6 @@ local initial_x_shader = love.graphics.newShader([[
 	}
 ]])
 
-local initial_v_shader = love.graphics.newShader([[
-	uniform float seed;
-
-	float rand(vec2 n, float s)
-	{
-		return fract(sin(dot(n + s, vec2(12.9898, 4.1414))) * 43758.5453);
-	}
-	
-	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
-	{
-        vec4 v;
-        v[0] = rand(texture_coords, seed);
-        v[1] = rand(texture_coords, seed+0.58448844);
-        v[2] = rand(texture_coords, seed+0.38406795);
-        v[3] = rand(texture_coords, seed+0.78849948);
-		return normalize(v);
-	}
-]])
-initial_v_shader:send("seed", (os.time()%10000)/10000)
-
 local x_shader = love.graphics.newShader([[
     float f1(float x, float y){
         return sin(x)*pow(cos(x)+cos(y)+4.0, -2.0);
@@ -51,8 +30,7 @@ local x_shader = love.graphics.newShader([[
 
     #define PI 3.1415926538
 
-	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
-	{
+	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords){
         float e = -0.6;
 
         vec4 x = Texel(texture, texture_coords);
@@ -70,11 +48,15 @@ local x_shader = love.graphics.newShader([[
 	}
 ]])
 
-local v_shader = love.graphics.newShader([[
-	uniform Image x_image;
+local mv_shader = love.graphics.newShader([[
+    uniform float seed;
+    uniform Image x_image;
 
-	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
-	{
+	float rand(vec2 n, float s){
+		return fract(sin(dot(n + s, vec2(12.9898, 4.1414))) * 43758.5453);
+	}
+
+	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords){
         float e = -0.6;
 
         vec4 x = Texel(x_image, texture_coords);
@@ -82,6 +64,13 @@ local v_shader = love.graphics.newShader([[
         float phi2 = x[1];
         float I1 = x[2];
         float I2 = x[3];
+
+        vec4 v;
+        v[0] = rand(texture_coords, seed);
+        v[1] = rand(texture_coords, seed+0.58448844);
+        v[2] = rand(texture_coords, seed+0.38406795);
+        v[3] = rand(texture_coords, seed+0.78849948);
+        v = normalize(v);
 
         float s1 = sin(phi1+I1);
         float s2 = sin(phi2+I2);
@@ -98,58 +87,24 @@ local v_shader = love.graphics.newShader([[
         J[3] = vec4(2.0*e*s1*s2/d3, 2.0*e*s2*s2/d3 + e*c2/d2, 2.0*e*s1*s2/d3, 2.0*e*s2*s2/d3 + e*c2/d2 + 1.0);
         J = transpose(J);
 
-        vec4 v = Texel(texture, texture_coords);
-
-	    return (J*v);
-	}
-]])
-
-local mv_shader = love.graphics.newShader([[
-	uniform Image v_image;
-    uniform Image ve_image;
-
-	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
-	{
-        vec4 v = Texel(v_image, texture_coords);
-        float ve = Texel(ve_image, texture_coords)[0];
+        float nv = log(length(J*v));
         float mv = Texel(texture, texture_coords)[0];
-        float nv = log(length(v));
-
-		return vec4(max(mv,nv+ve), 0.0, 0.0, 0.0);
+		return vec4(max(mv,nv), 0.0, 0.0, 0.0);
 	}
 ]])
 
 local display_shader = love.graphics.newShader([[
+    uniform float a;
+    uniform float b;
+
 	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
 	{
         float x = texture_coords[0];
         float y = 1.0 - texture_coords[1];
         float mv = Texel(texture, vec2(x,y))[0];
 
-        //float c = log(mv/20.0+1.);
-        float c = (mv - 2.0)/(20.0 - 2.0);
+        float c = a*mv-b;
 		return vec4(c, c, c, 1.0);
-	}
-]])
-
-local ve_shader = love.graphics.newShader([[
-    uniform Image v_image;
-
-	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
-	{
-        vec4 v = Texel(v_image, texture_coords);
-        float ve = Texel(texture, texture_coords)[0];
-        float nv = length(v);
-
-		return vec4(ve + log(nv), 0.0, 0.0, 0.0);
-	}
-]])
-
-local scale_shader = love.graphics.newShader([[
-	vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
-	{
-        vec4 v = Texel(texture, texture_coords);
-		return normalize(v);
 	}
 ]])
 
@@ -177,32 +132,25 @@ love.graphics.draw(white)
 love.graphics.setShader()
 love.graphics.setCanvas()
 
-local v = {}
-v[1] = love.graphics.newCanvas(nw, nh, {format="rgba32f"})
-v[2] = love.graphics.newCanvas(nw, nh, {format="rgba32f"})
-
-love.graphics.setCanvas(v[2])
-love.graphics.setShader(initial_v_shader)
-love.graphics.draw(white)
-love.graphics.setShader()
-love.graphics.setCanvas()
-
-local ve = {}
-ve[1] = love.graphics.newCanvas(nw, nh, {format="r32f"})
-ve[2] = love.graphics.newCanvas(nw, nh, {format="r32f"})
-
 local mv = {}
 mv[1] = love.graphics.newCanvas(nw, nh, {format="r32f"})
 mv[2] = love.graphics.newCanvas(nw, nh, {format="r32f"})
 
-local t = 0
-local T = 100
+local a = 1
+local b = 1
 function love.update(dt)
     if love.keyboard.isDown("escape") then
         love.event.quit()
     end
-
-    t = t + 1
+    mv_shader:send("seed", love.math.random())
+    
+    if love.keyboard.isDown("left") then a = a - .1*dt end
+    if love.keyboard.isDown("right") then a = a + .1*dt end
+    if love.keyboard.isDown("up") then b = b - .1*dt end
+    if love.keyboard.isDown("down") then b = b + .1*dt end
+    display_shader:send("a", a)
+    display_shader:send("b", b)
+    print(a, b)
 end
 
 function love.draw()
@@ -210,38 +158,14 @@ function love.draw()
     love.graphics.setCanvas(x[current])
     love.graphics.draw(x[3-current])
 
-    love.graphics.setShader(v_shader)
-    love.graphics.setCanvas(v[current])
-    v_shader:send("x_image", x[3-current])
-    love.graphics.draw(v[3-current])
-
     love.graphics.setShader(mv_shader)
     love.graphics.setCanvas(mv[current])
-    mv_shader:send("v_image", v[3-current])
-    mv_shader:send("ve_image", ve[1])
+    mv_shader:send("x_image", x[3-current])
     love.graphics.draw(mv[3-current])
 
     love.graphics.setShader(display_shader)
     love.graphics.setCanvas()
     love.graphics.draw(mv[current])
-
-    if t == T then
-        v[current], v[3-current] = v[3-current], v[current]
-        ve[1], ve[2] = ve[2], ve[1]
-
-        love.graphics.setShader(ve_shader)
-        love.graphics.setCanvas(ve[1])
-        ve_shader:send("v_image", v[3-current])
-        love.graphics.draw(ve[2])
-
-        love.graphics.setShader(scale_shader)
-        love.graphics.setCanvas(v[current])
-        love.graphics.draw(v[3-current])
-
-        t = 0
-    end
-
-    love.graphics.setCanvas()
 
     current = 3-current
 end
